@@ -1,0 +1,40 @@
+{
+    "function": [
+        {
+            "name": "Power",
+            "color": "#E83131"
+        },
+        {
+            "name": "Ground",
+            "color": "#363A44"
+        },
+        {
+            "name": "UART",
+            "color": "#9D89CE"
+        },
+        {
+            "name": "GPIO/PWM",
+            "color": "#7AC943"
+        },
+        {
+            "name": "ADC",
+            "color": "#427F21"
+        },
+        {
+            "name": "SPI",
+            "color": "#D83A94"
+        },
+        {
+            "name": "I2C",
+            "color": "#439ED6"
+        },
+        {
+            "name": "System Control",
+            "color": "#F6ADAD"
+        },
+        {
+            "name": "Debug",
+            "color": "#EA8326"
+        }
+    ]
+}

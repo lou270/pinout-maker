@@ -1,0 +1,10 @@
+__pycache__
+.claude
+.vscode
+*.js
+*.html
+*.css
+*.svg
+*.png
+*.csv
+

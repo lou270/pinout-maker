@@ -1,0 +1,229 @@
+########################################
+# Pinout image builder — Functions
+# Louis Barbier
+# MIT License
+########################################
+
+import xml.etree.ElementTree as ET
+from PIL import Image
+import base64
+import random
+import io
+import svg
+from Pin import Pin
+
+def detect_side_pin(cx, cy, svg_size):
+    # TODO find top and bottom pin
+    if cx < svg_size[0] / 2:
+        return 'left'
+    else:
+        return 'right'
+
+def detect_pin(elements, svg_size):
+    pin_detected = []
+    i = 0
+    for element in elements:
+        detected = False
+        if element.tag.endswith('circle'):  # Check for 'circle' element
+            cx = float(element.attrib['cx'])
+            cy = float(element.attrib['cy'])
+            r = float(element.attrib['r'])
+            detected = True
+        elif element.tag.endswith('path'):  # Check for 'path' element
+            min_x, max_x, min_y, max_y = svg.get_min_max_pos(element)
+            width, height = svg.get_size(min_x, max_x, min_y, max_y)
+            cx = min_x + width/2
+            cy = min_y + height/2
+            r = max(width/2, height/2)
+            if r < 2:
+                detected = True
+
+        if detected is True:
+            i = i + 1
+            side = detect_side_pin(cx, cy, svg_size)
+            pin_detected.append(Pin(cx, cy, r, i, side))
+            # pin_detected.append({'cx': cx, 'cy': cy, 'r': r})
+
+    return pin_detected
+
+line_length = 3  # Length of the horizontal line
+box_width = 10  # Width of the box for information
+box_height = 0.85*2  # Height of the box
+stroke_width = 0.05
+
+def add_pin_graphics(svg_root, pin):
+    if pin.side == 'left':
+        v = -1
+    else:
+        v = 1
+
+    # Add a line
+    line_element = ET.Element('ns0:path', {
+        'd': f'M {pin.cx},{pin.cy} l {v*line_length},{0}',
+        'fill': '#dcdcdc',
+        'stroke': '#dcdcdc',
+        'stroke-width': str(stroke_width)
+    })
+    # Add pin number (circle)
+    pin_number_element = ET.Element('ns0:circle', {
+        'cx': str(pin.cx+v*line_length+v*pin.r),
+        'cy': str(pin.cy),
+        'r': str(pin.r),
+        'fill': '#dcdcdc',
+        'stroke': 'none',
+        'stroke-width': str(stroke_width)
+    })
+    # Add pin number (text)
+    pin_number_text = ET.Element('ns0:text', {
+        'x': str(pin.cx+v*line_length+v*pin.r),
+        'y': str(pin.cy),
+        'text-anchor': 'middle',
+        'style': 'font-family:Consolas;font-size:'+str(pin.r*1.1)+';',
+        'dominant-baseline': 'central',
+        'fill': '#000000',
+        'stroke': '#000000',
+        'stroke-width': str(stroke_width)
+    })
+    pin_number_text.text = str(pin.number)
+
+    # Add function
+    el_functions = ET.Element('ns0:g', {'id': "g_pin_"+str(pin.number)+"_functions"})
+    for i,func in enumerate(pin.functions):
+        box_l = box_width
+        box_h = box_height
+        slope = 0.1
+        initial_point_x = pin.cx+v*line_length+v*2*pin.r+v*line_length-v*box_l*slope+v*box_l/2
+        initial_point_y = pin.cy-box_height/2
+        # Add a line
+        line_element_1 = ET.Element('ns0:path', {
+            'd': f'M {pin.cx+v*line_length+v*2*pin.r},{pin.cy} l {v*line_length},{0}',
+            'fill': '#dcdcdc',
+            'stroke': '#dcdcdc',
+            'stroke-width': str(stroke_width)
+        })
+        # Add pin function (box)
+        # original_d = f"M {initial_point_x},{initial_point_y} l {v*box_l*(1-slope)-v*box_l/2},{0} l {v*box_l*slope},{box_h} l {-v*box_l*(1-slope)},{0} l {-v*box_l*slope},{-box_h} Z"
+        original_d = f"M {initial_point_x},{initial_point_y} l {-box_l*(1-slope)+box_l/2},{0} l {-box_l*slope},{box_h} l {box_l*(1-slope)},{0} l {box_l*slope},{-box_h} Z"
+        # original_d = f"M {initial_point_x},{initial_point_y} L {initial_point_x-box_l*(1-slope)},{initial_point_y} L {initial_point_x-box_l*(1-slope)-box_l*slope},{initial_point_y+box_h} L {initial_point_x-box_l*slope},{initial_point_y+box_h} Z"
+        rounded_d = svg.round_path_corners(original_d, 0.3)
+        box_element = ET.Element('ns0:path', {
+            'd': rounded_d,
+            'fill': func['color'],
+            'stroke': func['color'],
+            'stroke-width': str(stroke_width*2)
+        })
+        # Add pin number (text)
+        box_element_text = ET.Element('ns0:text', {
+            'x': str(initial_point_x),
+            'y': str(pin.cy),
+            'text-anchor': 'middle',
+            'style': 'font-family:Consolas;font-size:'+str(pin.r*1.1)+';',
+            'dominant-baseline': 'central',
+            'fill': '#000000',
+            'stroke': '#000000',
+            'stroke-width': str(stroke_width)
+        })
+        box_element_text.text = func['name']
+
+        # svg.shift_element(line_element_1, i*v*(box_width+line_length), 0)
+        # svg.shift_element(box_element, i*v*(box_width+line_length), 0)
+        # svg.shift_element(box_element_text, i*v*(box_width+line_length), 0)
+
+        el_functions.append(line_element_1)
+        el_functions.append(box_element)
+        el_functions.append(box_element_text)
+
+        for el in el_functions[-3::1]:
+            svg.shift_element(el, i*v*(box_width+line_length-box_l*slope), 0)
+
+    # Add elements to a pin group and to the SVG root
+    group = ET.Element('ns0:g', {'id': "g_pin_"+str(pin.number)})
+    group.tail = "\n"
+    group.append(line_element)
+    group.append(pin_number_element)
+    group.append(pin_number_text)
+    group.append(el_functions)
+    # group.append(box_element)
+    # group.append(box_element_text)
+    svg_root.append(group)
+
+def pixels_to_mm(pixels, dpi):
+    """Convert pixels to millimeters."""
+    return (pixels / dpi) * 25.4
+
+def scale_image_to_svg(image_width_mm, image_height_mm, svg_width_mm, svg_height_mm):
+    """Scale the image dimensions proportionally to fit within the SVG dimensions."""
+    scale_x = svg_width_mm / image_width_mm
+    scale_y = svg_height_mm / image_height_mm
+    scale_factor = min(scale_x, scale_y)  # Scale proportionally
+
+    # Calculate the scaled image size
+    scaled_width_mm = image_width_mm * scale_factor
+    scaled_height_mm = image_height_mm * scale_factor
+
+    return scaled_width_mm, scaled_height_mm
+
+def add_board_image(svg_root, image_path, svg_width, svg_height):
+    image_base64, width, height, dpi, mime_type = read_image(image_path)
+
+    # Convert target dimensions from mm to pixels
+    target_width_px = (svg_width / 25.4) * dpi
+    target_height_px = (svg_height / 25.4) * dpi
+
+    # Scale the image dimensions to fit within the target size in mm
+    scale_x = svg_width / pixels_to_mm(width, dpi)
+    scale_y = svg_height / pixels_to_mm(height, dpi)
+
+    svg_root.append(svg.create_image_element(image_base64, svg_width, svg_height, mime_type))
+
+def read_image(image_path):
+    """Reads an image (PNG, JPG, BMP) and returns its base64-encoded data along with dimensions and MIME type."""
+    with open(image_path, 'rb') as img_file:
+        image = Image.open(img_file)
+        width, height = image.size
+
+        # Get DPI (dots per inch), default to 96 if DPI info is missing
+        dpi = image.info.get('dpi', (96, 96))[0]
+        
+        # Get the image format and map it to the corresponding MIME type
+        format_to_mime = {
+            'PNG': 'image/png',
+            'JPEG': 'image/jpeg',
+            'JPG': 'image/jpeg',
+            'BMP': 'image/bmp'
+        }
+        
+        image_format = image.format
+        if image_format not in format_to_mime:
+            raise ValueError(f"Unsupported image format: {image_format}")
+        
+        mime_type = format_to_mime[image_format]
+
+        # Convert image to base64-encoded string
+        image_buffer = io.BytesIO()
+        image.save(image_buffer, format=image_format)
+        image_base64 = base64.b64encode(image_buffer.getvalue()).decode('utf-8')
+
+    return image_base64, width, height, dpi, mime_type
+
+def prettify_svg(root, indent="  "):
+    """Prettify the ElementTree structure without using xml.dom.minidom and save it to a file."""
+    
+    def indent_element(elem, level=0):
+        """Recursively adds indentation to an element and its children."""
+        i = "\n" + level * indent
+        if len(elem):  # If the element has children
+            if not elem.text or not elem.text.strip():
+                elem.text = i + indent
+            if not elem.tail or not elem.tail.strip():
+                elem.tail = i
+            for child in elem:
+                indent_element(child, level + 1)
+            if not elem.tail or not elem.tail.strip():
+                elem.tail = i
+        else:  # If the element has no children
+            if level and (not elem.tail or not elem.tail.strip()):
+                elem.tail = i
+    
+    # Apply indentation to the root element
+    indent_element(root)
