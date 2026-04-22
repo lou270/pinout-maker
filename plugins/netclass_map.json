@@ -1,0 +1,24 @@
+{
+  "_comment": "Maps KiCad net-class or net-name regex patterns to a function name from config.json. First match wins. Edit freely.",
+  "rules": [
+    { "pattern": "^Power$",          "function": "Power"          },
+    { "pattern": "^\\+?\\d+V.*",     "function": "Power"          },
+    { "pattern": "^VCC.*",           "function": "Power"          },
+    { "pattern": "^VDD.*",           "function": "Power"          },
+    { "pattern": "^GND$",            "function": "Ground"         },
+    { "pattern": "^AGND$",           "function": "Ground"         },
+    { "pattern": "^DGND$",           "function": "Ground"         },
+    { "pattern": ".*GROUND.*",       "function": "Ground"         },
+    { "pattern": "^UART.*",          "function": "UART"           },
+    { "pattern": "^(TX|RX)D?\\b.*",  "function": "UART"           },
+    { "pattern": "^I2C.*",           "function": "I2C"            },
+    { "pattern": "^(SDA|SCL)\\b.*",  "function": "I2C"            },
+    { "pattern": "^SPI.*",           "function": "SPI"            },
+    { "pattern": "^(MOSI|MISO|SCK|CS|SS)\\b.*", "function": "SPI" },
+    { "pattern": "^ADC.*",           "function": "ADC"            },
+    { "pattern": "^(AIN|AN)\\d+.*",  "function": "ADC"            },
+    { "pattern": "^(SWD|SWCLK|SWDIO|TDI|TDO|TCK|TMS|TRST)\\b.*", "function": "Debug" },
+    { "pattern": "^(RESET|NRST|EN|ENABLE|BOOT)\\b.*", "function": "System Control" },
+    { "pattern": "^(GPIO|PWM|IO)\\d*.*", "function": "GPIO/PWM"   }
+  ]
+}

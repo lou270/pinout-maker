@@ -8,14 +8,17 @@ import base64
 import io
 import os
 import re
+import sys
 import webbrowser
 import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import xml.etree.ElementTree as ET
 from PIL import Image, ImageTk
-from svg import extract_points_from_path
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugins'))
+
+from svg import extract_points_from_path
 import save
 from function import detect_pin
 from main import load_pins_csv, build_pinout, generate_template_csv
@@ -133,7 +136,7 @@ class PinoutGUI(tk.Tk):
         self._pin_count   = 0
 
         self._build_ui()
-        self._load_config('config.json')
+        self._load_config(self._cfg_var.get())
 
     # ── UI construction ───────────────────────────────────────────────────────
 
@@ -142,10 +145,10 @@ class PinoutGUI(tk.Tk):
         files_frame = tk.LabelFrame(self, text='Files', padx=6, pady=6)
         files_frame.pack(fill='x', padx=8, pady=6)
 
-        self._svg_var = tk.StringVar(value='br_micro_sensor-F_Mask.svg')
-        self._img_var = tk.StringVar(value='br_micro_sensor_top_view.png')
-        self._out_var = tk.StringVar(value='output_pinout.svg')
-        self._cfg_var = tk.StringVar(value='config.json')
+        self._svg_var = tk.StringVar(value=os.path.join('examples', 'br_micro_sensor-F_Mask.svg'))
+        self._img_var = tk.StringVar(value=os.path.join('examples', 'br_micro_sensor_top_view.png'))
+        self._out_var = tk.StringVar(value=os.path.join('examples', 'output_pinout.svg'))
+        self._cfg_var = tk.StringVar(value=os.path.join('plugins', 'config.json'))
 
         rows = [
             ('Gerber mask SVG:', self._svg_var, self._browse_svg),

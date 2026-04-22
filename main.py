@@ -17,6 +17,9 @@ from PIL import Image
 import math
 import re
 import xml.etree.ElementTree as ET
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugins'))
+
 from function import *
 import save
 import svg
@@ -47,15 +50,15 @@ CSV format (one row per function box; multiple rows per pin for multiple functio
 Available function types are defined in config.json (Power, Ground, UART, etc.).
         """
     )
-    parser.add_argument('--input-svg',   default='br_micro_sensor-F_Mask.svg',
+    parser.add_argument('--input-svg',   default=os.path.join('examples', 'br_micro_sensor-F_Mask.svg'),
                         help='Input SVG gerber mask file (default: %(default)s)')
-    parser.add_argument('--board-image', default='br_micro_sensor_top_view.png',
+    parser.add_argument('--board-image', default=os.path.join('examples', 'br_micro_sensor_top_view.png'),
                         help='Board top-view image PNG/JPG/BMP (default: %(default)s)')
-    parser.add_argument('--output',      default='output_pinout.svg',
+    parser.add_argument('--output',      default=os.path.join('examples', 'output_pinout.svg'),
                         help='Output SVG file (default: %(default)s)')
     parser.add_argument('--pins',        metavar='FILE',
                         help='CSV file with pin labels and functions')
-    parser.add_argument('--config',      default='config.json',
+    parser.add_argument('--config',      default=os.path.join('plugins', 'config.json'),
                         help='Function config JSON (default: %(default)s)')
     parser.add_argument('--generate-template', action='store_true',
                         help='Detect pins and write pins_template.csv, then exit')

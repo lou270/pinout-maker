@@ -1,0 +1,168 @@
+########################################
+# Pinout image builder — KiCad wx dialog
+# Louis Barbier
+# MIT License
+########################################
+"""wxPython dialog for reviewing/editing detected pins before rendering.
+
+Grid columns: #, X (mm), Y (mm), Side, Label, Function, Show.
+Users can add / remove rows, edit any cell, and choose the output path.
+"""
+
+import json
+import os
+
+import wx
+import wx.grid
+
+import save as save_mod
+from Pin import Pin
+
+
+COLS = ('#', 'X (mm)', 'Y (mm)', 'Side', 'Label', 'Function', 'Show')
+
+
+class PinoutDialog(wx.Dialog):
+
+    def __init__(self, parent, pins, meta, svg_size_mm, board_image_path,
+                 function_names, default_output):
+        super().__init__(parent, title='Pinout Maker', size=(820, 520),
+                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+
+        self._function_names = list(function_names)
+        self._svg_size_mm    = svg_size_mm
+        self._board_image    = board_image_path
+
+        panel   = wx.Panel(self)
+        sizer   = wx.BoxSizer(wx.VERTICAL)
+
+        # ── Grid ──────────────────────────────────────────────────────────────
+        self.grid = wx.grid.Grid(panel)
+        self.grid.CreateGrid(0, len(COLS))
+        for i, name in enumerate(COLS):
+            self.grid.SetColLabelValue(i, name)
+        self.grid.SetColSize(0, 40)
+        self.grid.SetColSize(1, 80)
+        self.grid.SetColSize(2, 80)
+        self.grid.SetColSize(3, 60)
+        self.grid.SetColSize(4, 140)
+        self.grid.SetColSize(5, 140)
+        self.grid.SetColSize(6, 50)
+
+        for pin in pins:
+            info = meta.get(pin.number, {})
+            self._append_row(
+                number=pin.number,
+                x=pin.cx,
+                y=pin.cy,
+                side=pin.side,
+                label=info.get('net_name', ''),
+                function=info.get('suggested_function', ''),
+            )
+
+        sizer.Add(self.grid, 1, wx.EXPAND | wx.ALL, 6)
+
+        # ── Row buttons ───────────────────────────────────────────────────────
+        row_btns = wx.BoxSizer(wx.HORIZONTAL)
+        add_btn  = wx.Button(panel, label='Add pin')
+        rm_btn   = wx.Button(panel, label='Remove selected')
+        add_btn.Bind(wx.EVT_BUTTON, self._on_add)
+        rm_btn .Bind(wx.EVT_BUTTON, self._on_remove)
+        row_btns.Add(add_btn, 0, wx.RIGHT, 6)
+        row_btns.Add(rm_btn,  0)
+        sizer.Add(row_btns, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 6)
+
+        # ── Output path ───────────────────────────────────────────────────────
+        out_row = wx.BoxSizer(wx.HORIZONTAL)
+        out_row.Add(wx.StaticText(panel, label='Output:'),
+                    0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 4)
+        self.out_ctrl = wx.TextCtrl(panel, value=default_output)
+        browse_btn = wx.Button(panel, label='…', size=(28, -1))
+        browse_btn.Bind(wx.EVT_BUTTON, self._on_browse)
+        out_row.Add(self.out_ctrl, 1, wx.EXPAND | wx.RIGHT, 4)
+        out_row.Add(browse_btn, 0)
+        sizer.Add(out_row, 0, wx.EXPAND | wx.ALL, 6)
+
+        # ── OK / Cancel ───────────────────────────────────────────────────────
+        btn_row = wx.BoxSizer(wx.HORIZONTAL)
+        ok_btn     = wx.Button(panel, wx.ID_OK, 'Generate')
+        cancel_btn = wx.Button(panel, wx.ID_CANCEL, 'Cancel')
+        btn_row.AddStretchSpacer()
+        btn_row.Add(cancel_btn, 0, wx.RIGHT, 6)
+        btn_row.Add(ok_btn, 0)
+        sizer.Add(btn_row, 0, wx.EXPAND | wx.ALL, 6)
+
+        panel.SetSizer(sizer)
+
+    # ── Grid helpers ──────────────────────────────────────────────────────────
+
+    def _append_row(self, number=0, x=0.0, y=0.0, side='left', label='', function=''):
+        row = self.grid.GetNumberRows()
+        self.grid.AppendRows(1)
+        self.grid.SetCellValue(row, 0, str(number))
+        self.grid.SetCellValue(row, 1, f'{x:.3f}')
+        self.grid.SetCellValue(row, 2, f'{y:.3f}')
+        self.grid.SetCellValue(row, 3, side)
+        self.grid.SetCellEditor(row, 3, wx.grid.GridCellChoiceEditor(
+            ['left', 'right', 'top', 'bottom'], allowOthers=False))
+        self.grid.SetCellValue(row, 4, label)
+        self.grid.SetCellValue(row, 5, function)
+        self.grid.SetCellEditor(row, 5, wx.grid.GridCellChoiceEditor(
+            [''] + self._function_names, allowOthers=True))
+        self.grid.SetCellValue(row, 6, '1')
+        self.grid.SetCellEditor(row, 6, wx.grid.GridCellBoolEditor())
+        self.grid.SetCellRenderer(row, 6, wx.grid.GridCellBoolRenderer())
+
+    def _on_add(self, _event):
+        next_n = self.grid.GetNumberRows() + 1
+        self._append_row(number=next_n)
+
+    def _on_remove(self, _event):
+        rows = sorted({b.GetTopRow() for b in self.grid.GetSelectedBlocks()}, reverse=True)
+        if not rows:
+            rows = [self.grid.GetGridCursorRow()] if self.grid.GetNumberRows() else []
+        for r in rows:
+            if 0 <= r < self.grid.GetNumberRows():
+                self.grid.DeleteRows(r, 1)
+
+    def _on_browse(self, _event):
+        with wx.FileDialog(self, 'Save pinout SVG',
+                           wildcard='SVG files (*.svg)|*.svg',
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as dlg:
+            if dlg.ShowModal() == wx.ID_OK:
+                self.out_ctrl.SetValue(dlg.GetPath())
+
+    # ── Result ────────────────────────────────────────────────────────────────
+
+    def collect(self, function_color_map):
+        """Read the grid and return (pins, svg_size_mm, output_path)."""
+        pins = []
+        for row in range(self.grid.GetNumberRows()):
+            try:
+                number = int(self.grid.GetCellValue(row, 0).strip())
+                x      = float(self.grid.GetCellValue(row, 1).strip() or 0)
+                y      = float(self.grid.GetCellValue(row, 2).strip() or 0)
+            except ValueError:
+                continue
+            side  = self.grid.GetCellValue(row, 3).strip() or 'left'
+            label = self.grid.GetCellValue(row, 4).strip()
+            func  = self.grid.GetCellValue(row, 5).strip()
+            show  = self.grid.GetCellValue(row, 6).strip() in ('1', 'True', 'true')
+            if not show:
+                continue
+
+            pin = Pin(cx=x, cy=y, r=0.85, number=number, side=side, displayed=True)
+            if label or func:
+                pin.add_function(
+                    label or func or f'pin_{number}',
+                    function_color_map.get(func, '#888888'),
+                )
+            pins.append(pin)
+
+        return pins, self._svg_size_mm, self.out_ctrl.GetValue().strip()
+
+
+def function_color_map(config_path):
+    """Build {function_name: hex_color} from config.json."""
+    cfg = save_mod.from_json(config_path)
+    return {f['name']: f['color'] for f in cfg.get('function', [])}

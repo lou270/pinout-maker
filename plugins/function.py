@@ -4,6 +4,7 @@
 # MIT License
 ########################################
 
+import os
 import xml.etree.ElementTree as ET
 from PIL import Image
 import base64
@@ -11,6 +12,8 @@ import random
 import io
 import svg
 from Pin import Pin
+
+SVG_NS = 'http://www.w3.org/2000/svg'
 
 def detect_side_pin(cx, cy, svg_size):
     # TODO find top and bottom pin
@@ -223,3 +226,39 @@ def prettify_svg(root, indent="  "):
     
     # Apply indentation to the root element
     indent_element(root)
+
+
+def create_svg_root(width_mm, height_mm):
+    """Create a blank SVG root sized in millimetres.
+
+    Uses the same ns0: namespace aliasing that ElementTree applies when parsing
+    a KiCad gerber SVG, so the child elements built by add_pin_graphics() and
+    create_image_element() (which use literal 'ns0:*' tag names) serialize
+    correctly.
+    """
+    root = ET.Element(f'{{{SVG_NS}}}svg')
+    root.set('width', f'{width_mm}mm')
+    root.set('height', f'{height_mm}mm')
+    root.set('viewBox', f'0 0 {width_mm} {height_mm}')
+    return root
+
+
+def render_pinout(pins, board_image_path, svg_size_mm, output_path):
+    """Render an annotated pinout SVG from a pre-built Pin list.
+
+    Entry point used by the KiCad plugin where pads come from pcbnew
+    rather than a gerber SVG.
+    """
+    width, height = svg_size_mm
+    root = create_svg_root(width, height)
+
+    for pin in pins:
+        add_pin_graphics(root, pin)
+
+    if board_image_path and os.path.isfile(board_image_path):
+        add_board_image(root, board_image_path, width, height)
+
+    svg.update_bounding_box(root, margin=10)
+    prettify_svg(root)
+    ET.ElementTree(root).write(output_path)
+    return output_path

@@ -8,3 +8,9 @@ __pycache__
 *.png
 *.csv
 
+# Allow PCM icon to be versioned
+!resources/icon.png
+
+# Build output
+/dist/
+
