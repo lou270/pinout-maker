@@ -62,6 +62,10 @@ Available function types are defined in config.json (Power, Ground, UART, etc.).
                         help='Function config JSON (default: %(default)s)')
     parser.add_argument('--generate-template', action='store_true',
                         help='Detect pins and write pins_template.csv, then exit')
+    parser.add_argument('--no-png', action='store_true',
+                        help='Skip the PNG export alongside the SVG')
+    parser.add_argument('--png-dpi', type=int, default=300,
+                        help='DPI for the PNG export (default: %(default)s)')
     return parser.parse_args()
 
 
@@ -123,7 +127,8 @@ def generate_template_csv(pins, output_path='pins_template.csv', config=None):
     print(f"\nThen run:\n  python main.py --pins {output_path}")
 
 
-def build_pinout(input_svg, board_image, output_file, pins_data):
+def build_pinout(input_svg, board_image, output_file, pins_data,
+                 export_png=True, png_dpi=300):
     """Core rendering logic, shared between CLI and GUI."""
     tree = ET.parse(input_svg)
     root = tree.getroot()
@@ -155,6 +160,15 @@ def build_pinout(input_svg, board_image, output_file, pins_data):
     prettify_svg(root)
     tree.write(output_file)
     print(f"Pinout saved to: {output_file}")
+
+    if export_png:
+        png_path = os.path.splitext(output_file)[0] + '.png'
+        if svg_to_png(output_file, png_path, dpi=png_dpi):
+            print(f"PNG saved to:    {png_path}")
+        else:
+            print('PNG export skipped (no rasteriser found). '
+                  'Install svglib+reportlab, cairosvg, inkscape, or librsvg to enable.')
+
     return pin_detected
 
 
@@ -191,7 +205,8 @@ def main():
         pins_data = load_pins_csv(args.pins, config)
         print(f"Loaded pin data for {len(pins_data)} pins from {args.pins}")
 
-    build_pinout(args.input_svg, args.board_image, args.output, pins_data)
+    build_pinout(args.input_svg, args.board_image, args.output, pins_data,
+                 export_png=not args.no_png, png_dpi=args.png_dpi)
 
 
 if __name__ == '__main__':

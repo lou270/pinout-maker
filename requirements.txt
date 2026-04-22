@@ -1,0 +1,7 @@
+Pillow
+# PNG export — any one of these enables it (listed in preferred order):
+svglib
+reportlab
+# cairosvg        # needs native libcairo — heavier install
+# rsvg-convert    # external binary (librsvg)
+# inkscape        # external binary

@@ -27,7 +27,7 @@ Generate annotated pinout SVGs for PCBs. Works either:
    - Labels are pre-filled with net names.
    - Functions are pre-filled by matching net names/classes against `plugins/netclass_map.json`.
 4. Edit freely — add or remove rows, change sides, override functions.
-5. Choose the output SVG path and click **Generate**.
+5. Choose the output SVG path and click **Generate**. A PNG with the same basename is exported alongside the SVG if a rasteriser is installed (see *PNG export* below).
 
 ## Standalone CLI
 
@@ -37,13 +37,25 @@ python main.py --input-svg examples/br_micro_sensor-F_Mask.svg --generate-templa
 
 # 2. Fill in pins_template.csv (number, label, function)
 
-# 3. Render the pinout
+# 3. Render the pinout (SVG + PNG)
 python main.py \
     --input-svg   examples/br_micro_sensor-F_Mask.svg \
     --board-image examples/br_micro_sensor_top_view.png \
     --pins        examples/pins_template.csv \
     --output      examples/output_pinout.svg
+# Use --no-png to skip the PNG export, --png-dpi N to change the DPI (default 300).
 ```
+
+## PNG export
+
+Every render produces an SVG and, when a rasteriser is available, a PNG with the same basename. Tried in order:
+
+1. **cairosvg** (`pip install cairosvg` — needs native libcairo, heaviest).
+2. **svglib + reportlab** (`pip install svglib reportlab` — pure Python, recommended).
+3. **inkscape** on `PATH`.
+4. **rsvg-convert** on `PATH`.
+
+If none of the above is found, the SVG is still written and a message explains how to enable PNG.
 
 ## Standalone Tkinter GUI
 

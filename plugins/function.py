@@ -243,11 +243,15 @@ def create_svg_root(width_mm, height_mm):
     return root
 
 
-def render_pinout(pins, board_image_path, svg_size_mm, output_path):
+def render_pinout(pins, board_image_path, svg_size_mm, output_path,
+                  export_png=True, png_dpi=300):
     """Render an annotated pinout SVG from a pre-built Pin list.
 
     Entry point used by the KiCad plugin where pads come from pcbnew
     rather than a gerber SVG.
+
+    When export_png=True, also writes a PNG next to output_path (same
+    basename, .png extension) if a rasteriser is available.
     """
     width, height = svg_size_mm
     root = create_svg_root(width, height)
@@ -261,4 +265,60 @@ def render_pinout(pins, board_image_path, svg_size_mm, output_path):
     svg.update_bounding_box(root, margin=10)
     prettify_svg(root)
     ET.ElementTree(root).write(output_path)
+
+    if export_png:
+        png_path = os.path.splitext(output_path)[0] + '.png'
+        ok = svg_to_png(output_path, png_path, dpi=png_dpi)
+        if not ok:
+            print('[pinout] PNG export skipped (no rasteriser found). '
+                  'Install svglib+reportlab, cairosvg, inkscape, or librsvg to enable.')
+
     return output_path
+
+
+def svg_to_png(svg_path, png_path, dpi=300):
+    """Rasterise an SVG to PNG.
+
+    Tries cairosvg first (pure-Python with native cairo), then inkscape,
+    then rsvg-convert. Returns True on success, False otherwise.
+    """
+    # 1. cairosvg — may fail if libcairo isn't installed on the host.
+    try:
+        import cairosvg
+        cairosvg.svg2png(url=svg_path, write_to=png_path, dpi=dpi)
+        if os.path.isfile(png_path) and os.path.getsize(png_path) > 0:
+            return True
+    except Exception:
+        pass
+
+    # 2. svglib + reportlab (pure-Python fallback, no native deps).
+    try:
+        from svglib.svglib import svg2rlg
+        from reportlab.graphics import renderPM
+        drawing = svg2rlg(svg_path)
+        if drawing is not None:
+            renderPM.drawToFile(drawing, png_path, fmt='PNG', dpi=dpi)
+            if os.path.isfile(png_path) and os.path.getsize(png_path) > 0:
+                return True
+    except Exception:
+        pass
+
+    # 3 & 4. External binaries.
+    import subprocess
+    candidates = [
+        ('inkscape',     ['inkscape', f'--export-dpi={dpi}',
+                          '--export-type=png', f'--export-filename={png_path}',
+                          svg_path]),
+        ('rsvg-convert', ['rsvg-convert', '-d', str(dpi), '-p', str(dpi),
+                          '-o', png_path, svg_path]),
+    ]
+    for _name, cmd in candidates:
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=60)
+            if result.returncode == 0 and os.path.isfile(png_path) \
+                    and os.path.getsize(png_path) > 0:
+                return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+
+    return False
