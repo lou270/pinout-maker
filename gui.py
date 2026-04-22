@@ -7,12 +7,14 @@
 import base64
 import io
 import os
+import re
 import webbrowser
 import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import xml.etree.ElementTree as ET
 from PIL import Image, ImageTk
+from svg import extract_points_from_path
 
 import save
 from function import detect_pin
@@ -213,8 +215,6 @@ class PinoutGUI(tk.Tk):
 
         preview_toolbar = tk.Frame(preview_outer)
         preview_toolbar.pack(fill='x', pady=(0, 4))
-        tk.Button(preview_toolbar, text='⟳ Refresh',
-                  command=self._refresh_preview, width=12).pack(side='left', padx=4)
         tk.Button(preview_toolbar, text='Open in browser',
                   command=self._open_in_browser, width=14).pack(side='left', padx=4)
 
@@ -439,35 +439,142 @@ class PinoutGUI(tk.Tk):
             return
 
         try:
-            img = self._extract_preview_image(out_path)
-            img.thumbnail((cw, ch), Image.LANCZOS)
-            self._preview_photo = ImageTk.PhotoImage(img)
-            c.create_image(cw // 2, ch // 2,
-                           image=self._preview_photo, anchor='center')
+            self._render_svg_on_canvas(out_path, c, cw, ch)
         except Exception as exc:
             c.create_text(cw // 2, ch // 2,
                           text=f'Preview error:\n{exc}',
                           justify='center', fill='#ff6666',
                           font=('Segoe UI', 9))
 
-    def _extract_preview_image(self, svg_path):
-        """Extract the embedded base64 board image from the generated SVG."""
+    def _render_svg_on_canvas(self, svg_path, c, cw, ch):
+        """Parse the output SVG and draw every element on the tkinter Canvas."""
         tree = ET.parse(svg_path)
         root = tree.getroot()
 
-        # Find the first <image> element (namespace-agnostic)
-        img_el = next((el for el in root.iter() if el.tag.endswith('image')), None)
-        if img_el is None:
-            raise ValueError('No embedded image found in SVG')
+        # ── Coordinate transform ──────────────────────────────────────────────
+        vb_str = root.get('viewBox', '')
+        if vb_str:
+            vb_x, vb_y, vb_w, vb_h = (float(v) for v in vb_str.split())
+        else:
+            vb_x, vb_y = 0.0, 0.0
+            vb_w = float(root.get('width',  '100').replace('mm', ''))
+            vb_h = float(root.get('height', '100').replace('mm', ''))
 
-        href = (img_el.get('href') or
-                img_el.get('{http://www.w3.org/1999/xlink}href', ''))
-        if not href.startswith('data:'):
-            raise ValueError('Embedded image is not a data URI')
+        scale    = min(cw / vb_w, ch / vb_h)
+        offset_x = (cw - vb_w * scale) / 2
+        offset_y = (ch - vb_h * scale) / 2
 
-        # data:image/png;base64,<payload>
-        _, payload = href.split(',', 1)
-        return Image.open(io.BytesIO(base64.b64decode(payload)))
+        def tx(x, y):
+            return (x - vb_x) * scale + offset_x, (y - vb_y) * scale + offset_y
+
+        def flat(points):
+            out = []
+            for px, py in points:
+                cx2, cy2 = tx(px, py)
+                out += [cx2, cy2]
+            return out
+
+        def svg_color(val):
+            return val if (val and val != 'none') else ''
+
+        # ── Draw background ───────────────────────────────────────────────────
+        c.create_rectangle(0, 0, cw, ch, fill='#2b2b2b', outline='')
+
+        self._preview_photos = []   # keep PIL refs alive
+
+        # ── Iterate elements in document order ────────────────────────────────
+        for el in root.iter():
+            tag = el.tag.split('}')[-1]   # strip namespace
+
+            # ── <image> ───────────────────────────────────────────────────────
+            if tag == 'image':
+                href = (el.get('href') or
+                        el.get('{http://www.w3.org/1999/xlink}href', ''))
+                if not href.startswith('data:'):
+                    continue
+                try:
+                    _, payload = href.split(',', 1)
+                    img = Image.open(io.BytesIO(
+                        base64.b64decode(payload.rstrip(';'))))
+                    x  = float(el.get('x', 0))
+                    y  = float(el.get('y', 0))
+                    w  = float(el.get('width',  vb_w))
+                    h  = float(el.get('height', vb_h))
+                    x1, y1 = tx(x,     y)
+                    x2, y2 = tx(x + w, y + h)
+                    pw, ph = max(1, int(x2 - x1)), max(1, int(y2 - y1))
+                    img = img.resize((pw, ph), Image.LANCZOS)
+                    photo = ImageTk.PhotoImage(img)
+                    self._preview_photos.append(photo)
+                    c.create_image(x1, y1, image=photo, anchor='nw')
+                except Exception:
+                    pass
+
+            # ── <circle> ─────────────────────────────────────────────────────
+            elif tag == 'circle':
+                cx  = float(el.get('cx', 0))
+                cy  = float(el.get('cy', 0))
+                r   = float(el.get('r',  1))
+                sw  = float(el.get('stroke-width', 0)) * scale
+                x1, y1 = tx(cx - r, cy - r)
+                x2, y2 = tx(cx + r, cy + r)
+                kw = dict(fill=svg_color(el.get('fill')),
+                          outline=svg_color(el.get('stroke')),
+                          width=max(1, sw))
+                c.create_oval(x1, y1, x2, y2, **kw)
+
+            # ── <path> ───────────────────────────────────────────────────────
+            elif tag == 'path':
+                d = el.get('d', '')
+                if not d:
+                    continue
+                try:
+                    pts = extract_points_from_path(d)
+                except Exception:
+                    continue
+                if len(pts) < 2:
+                    continue
+                coords = flat(pts)
+                fill   = svg_color(el.get('fill'))
+                stroke = svg_color(el.get('stroke'))
+                sw     = float(el.get('stroke-width', 0)) * scale
+                if 'Z' in d or 'z' in d:   # closed → polygon
+                    c.create_polygon(coords, fill=fill,
+                                     outline=stroke, width=max(1, sw),
+                                     smooth=False)
+                else:                        # open → line
+                    c.create_line(coords, fill=stroke or fill,
+                                  width=max(1, sw))
+
+            # ── <text> ───────────────────────────────────────────────────────
+            elif tag == 'text':
+                text = el.text
+                if not text:
+                    continue
+                x = float(el.get('x', 0))
+                y = float(el.get('y', 0))
+                fill = svg_color(el.get('fill')) or 'black'
+
+                # Font size from style="font-family:...;font-size:X;"
+                style = el.get('style', '')
+                m = re.search(r'font-size:([\d.]+)', style)
+                fs = int(max(6, float(m.group(1)) * scale)) if m else 8
+
+                # text-anchor + dominant-baseline → tkinter anchor
+                ta  = el.get('text-anchor', 'start')
+                dbl = el.get('dominant-baseline', '')
+                if ta == 'middle' and dbl == 'central':
+                    anchor = 'center'
+                elif ta == 'middle':
+                    anchor = 'n'
+                elif ta == 'end':
+                    anchor = 'e'
+                else:
+                    anchor = 'w'
+
+                px, py = tx(x, y)
+                c.create_text(px, py, text=text, fill=fill,
+                              font=('Consolas', fs), anchor=anchor)
 
     def _open_in_browser(self):
         out_path = self._out_var.get()

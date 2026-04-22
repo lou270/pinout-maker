@@ -102,9 +102,7 @@ def add_pin_graphics(svg_root, pin):
             'stroke-width': str(stroke_width)
         })
         # Add pin function (box)
-        # original_d = f"M {initial_point_x},{initial_point_y} l {v*box_l*(1-slope)-v*box_l/2},{0} l {v*box_l*slope},{box_h} l {-v*box_l*(1-slope)},{0} l {-v*box_l*slope},{-box_h} Z"
         original_d = f"M {initial_point_x},{initial_point_y} l {-box_l*(1-slope)+box_l/2},{0} l {-box_l*slope},{box_h} l {box_l*(1-slope)},{0} l {box_l*slope},{-box_h} Z"
-        # original_d = f"M {initial_point_x},{initial_point_y} L {initial_point_x-box_l*(1-slope)},{initial_point_y} L {initial_point_x-box_l*(1-slope)-box_l*slope},{initial_point_y+box_h} L {initial_point_x-box_l*slope},{initial_point_y+box_h} Z"
         rounded_d = svg.round_path_corners(original_d, 0.3)
         box_element = ET.Element('ns0:path', {
             'd': rounded_d,
@@ -117,10 +115,10 @@ def add_pin_graphics(svg_root, pin):
             'x': str(initial_point_x),
             'y': str(pin.cy),
             'text-anchor': 'middle',
-            'style': 'font-family:Consolas;font-size:'+str(pin.r*1.1)+';',
+            'style': 'font-family:Monospace;font-size:'+str(pin.r*1.05)+';',
             'dominant-baseline': 'central',
-            'fill': '#000000',
-            'stroke': '#000000',
+            'fill': '#FFFFFF',
+            'stroke': '#FFFFFF',
             'stroke-width': str(stroke_width)
         })
         box_element_text.text = func['name']
@@ -143,8 +141,6 @@ def add_pin_graphics(svg_root, pin):
     group.append(pin_number_element)
     group.append(pin_number_text)
     group.append(el_functions)
-    # group.append(box_element)
-    # group.append(box_element_text)
     svg_root.append(group)
 
 def pixels_to_mm(pixels, dpi):
