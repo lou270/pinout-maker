@@ -8,6 +8,12 @@ import math
 import re
 import xml.etree.ElementTree as ET
 
+SVG_NS = 'http://www.w3.org/2000/svg'
+XLINK_NS = 'http://www.w3.org/1999/xlink'
+
+def _svg_tag(name):
+    return f'{{{SVG_NS}}}{name}'
+
 # Helper function to calculate the distance between two points
 def distance(p1, p2):
     return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
@@ -197,15 +203,16 @@ def round_path_corners(d, radius):
 def create_image_element(image_base64, width, height, mime_type, x_pos=0, y_pos=0):
     """Embeds the base64-encoded image (PNG, JPG, BMP) into the SVG as an <image> tag."""
 
-    # Create the <image> element and embed the image data as base64
+    data_uri = f'data:{mime_type};base64,{image_base64}'
     image_element = ET.Element(
-        'ns0:image',
+        _svg_tag('image'),
         {
-            'href': f'data:{mime_type};base64,{image_base64};',  # Embed image using data URI
+            'href': data_uri,
+            f'{{{XLINK_NS}}}href': data_uri,  # legacy fallback for renderers that only honour xlink:href
             'id': "image1",
             'width': str(width),
             'height': str(height),
-            'x': str(x_pos),  # Position the image at the top-left of the SVG canvas
+            'x': str(x_pos),
             'y': str(y_pos),
             'preserveAspectRatio': 'none'
         }
@@ -220,9 +227,7 @@ def get_min_max_pos(element):
     max_y = float('-inf')
 
     if element.tag.endswith('path'):
-        print(element.attrib['d'])
         coords = extract_points_from_path(element.attrib['d'])
-        print(coords)
         for cd in coords:
             min_x = min(float(cd[0]), min_x)
             min_y = min(float(cd[1]), min_y)
@@ -236,8 +241,15 @@ def get_min_max_pos(element):
         max_x = cx + r
         min_y = cy - r
         max_y = cy + r
-    # else:
-        # raise ValueError("[get_min_max_pos] Element not recognize")
+    elif element.tag.endswith('image') or element.tag.endswith('rect'):
+        try:
+            x = float(element.attrib.get('x', 0))
+            y = float(element.attrib.get('y', 0))
+            w = float(element.attrib.get('width', 0))
+            h = float(element.attrib.get('height', 0))
+            min_x, max_x, min_y, max_y = x, x + w, y, y + h
+        except (TypeError, ValueError):
+            pass
 
     return min_x, max_x, min_y, max_y
 
@@ -292,16 +304,20 @@ def update_bounding_box(root, margin=0):
 
     width, height = get_size(min_x, max_x, min_y, max_y)
 
-    # # Shift every element to have min_x/min_y = 0
-    # for el in root.iter():
-    #     shift_element(el, -min_x, -min_y)
-    # min_x, min_y = 0,0
+    # Shift every element so the content starts at (0,0). This keeps the
+    # viewBox non-negative, which some rasterisers (svglib/reportlab) require
+    # to place <image> tags consistently with the rest of the drawing.
+    pad = margin / 2
+    dx = -min_x + pad
+    dy = -min_y + pad
+    for el in root.iter():
+        shift_element(el, dx, dy)
 
-    # Update metadata to match the true size
-    root.attrib['width'] = str(width+margin)+"mm"
-    root.attrib['height'] = str(height+margin)+"mm"
-    view_box = [str(v) for v in [min_x,min_y,width,height]]
-    root.attrib['viewBox'] = " ".join(view_box)
+    total_w = width + margin
+    total_h = height + margin
+    root.attrib['width'] = f"{total_w}mm"
+    root.attrib['height'] = f"{total_h}mm"
+    root.attrib['viewBox'] = f"0 0 {total_w} {total_h}"
 
-    return width,height
+    return width, height
 

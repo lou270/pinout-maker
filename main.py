@@ -64,7 +64,7 @@ Available function types are defined in config.json (Power, Ground, UART, etc.).
                         help='Detect pins and write pins_template.csv, then exit')
     parser.add_argument('--no-png', action='store_true',
                         help='Skip the PNG export alongside the SVG')
-    parser.add_argument('--png-dpi', type=int, default=300,
+    parser.add_argument('--png-dpi', type=int, default=600,
                         help='DPI for the PNG export (default: %(default)s)')
     return parser.parse_args()
 
@@ -156,7 +156,7 @@ def build_pinout(input_svg, board_image, output_file, pins_data,
 
     add_board_image(root, board_image, svg_width, svg_height)
 
-    svg.update_bounding_box(root, margin=10)
+    svg.update_bounding_box(root, margin=1)
     prettify_svg(root)
     tree.write(output_file)
     print(f"Pinout saved to: {output_file}")
