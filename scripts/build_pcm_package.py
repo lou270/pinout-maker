@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the KiCad PCM distribution zip for pinout-maker.
 
-Produces dist/com.berry_rocket.pinout_maker.zip containing:
+Produces dist/com.lou270.pinout_maker.zip containing:
   - metadata.json  (with download_sha256 / download_size / install_size patched)
   - plugins/       (Python sources)
   - resources/     (icon)
@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT        = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = ROOT / 'dist'
-IDENTIFIER  = 'com.berry_rocket.pinout_maker'
+IDENTIFIER  = 'com.lou270.pinout_maker'
 
 INCLUDED_DIRS  = ['plugins', 'resources']
 INCLUDED_FILES = ['metadata.json']

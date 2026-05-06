@@ -16,7 +16,7 @@ Generate annotated pinout SVGs for PCBs. Works either:
 
 ### Manual install (any KiCad 7+)
 
-1. Download `com.berry_rocket.pinout_maker.zip` from the [Releases](https://github.com/lou270/pinout-maker/releases) page.
+1. Download `com.lou270.pinout_maker.zip` from the [Releases](https://github.com/lou270/pinout-maker/releases) page.
 2. KiCad → *Plugin and Content Manager* → *Install from file* → select the zip.
 
 ### Using it
@@ -87,7 +87,7 @@ pinout-maker/
 ## Releasing
 
 Tagging `vX.Y.Z` triggers `.github/workflows/release.yml`, which runs
-`scripts/build_pcm_package.py` and uploads `com.berry_rocket.pinout_maker.zip`
+`scripts/build_pcm_package.py` and uploads `com.lou270.pinout_maker.zip`
 plus `metadata.json` as release assets. Point your PCM third-party repository URL
 at the release's `metadata.json` to distribute it.
 
