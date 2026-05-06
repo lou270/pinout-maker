@@ -177,32 +177,58 @@ def add_board_image(svg_root, image_path, svg_width, svg_height):
     svg_root.append(image_el)
     # svg_root.insert(0, image_el)
 
+def _autocrop_transparent(image):
+    """Crop fully-transparent borders from an RGBA image.
+
+    Returns the cropped image. If the image has no alpha channel or the
+    bounding box covers the whole image, it is returned unchanged.
+    """
+    if image.mode not in ('RGBA', 'LA'):
+        return image
+    alpha = image.split()[-1]
+    bbox = alpha.getbbox()
+    if bbox is None or bbox == (0, 0, image.size[0], image.size[1]):
+        return image
+    return image.crop(bbox)
+
+
 def read_image(image_path):
-    """Reads an image (PNG, JPG, BMP) and returns its base64-encoded data along with dimensions and MIME type."""
+    """Reads an image (PNG, JPG, BMP) and returns its base64-encoded data along with dimensions and MIME type.
+
+    Transparent borders are auto-cropped so the embedded image tightly
+    matches the actual board, otherwise the SVG would stretch those
+    invisible margins and the board would appear squished.
+    """
     with open(image_path, 'rb') as img_file:
         image = Image.open(img_file)
-        width, height = image.size
+        image.load()
 
-        # Get DPI (dots per inch), default to 96 if DPI info is missing
+        original_format = image.format
         dpi = image.info.get('dpi', (96, 96))[0]
-        
-        # Get the image format and map it to the corresponding MIME type
+
+        # Drop transparent padding around the board.
+        cropped = _autocrop_transparent(image)
+        width, height = cropped.size
+
         format_to_mime = {
             'PNG': 'image/png',
             'JPEG': 'image/jpeg',
             'JPG': 'image/jpeg',
             'BMP': 'image/bmp'
         }
-        
-        image_format = image.format
-        if image_format not in format_to_mime:
-            raise ValueError(f"Unsupported image format: {image_format}")
-        
-        mime_type = format_to_mime[image_format]
+        if original_format not in format_to_mime:
+            raise ValueError(f"Unsupported image format: {original_format}")
 
-        # Convert image to base64-encoded string
+        # Re-encode as PNG when the source has alpha, so the cropped result
+        # round-trips losslessly (JPEG can't carry alpha).
+        if cropped.mode in ('RGBA', 'LA'):
+            out_format = 'PNG'
+        else:
+            out_format = original_format
+        mime_type = format_to_mime[out_format]
+
         image_buffer = io.BytesIO()
-        image.save(image_buffer, format=image_format)
+        cropped.save(image_buffer, format=out_format)
         image_base64 = base64.b64encode(image_buffer.getvalue()).decode('utf-8')
 
     return image_base64, width, height, dpi, mime_type
@@ -376,7 +402,7 @@ def svg_to_png(svg_path, png_path, dpi=300):
                     continue
                 images.append((href, x, y, w, h))
                 parent.remove(child)
-    print(images)
+
     # Write the stripped SVG to a temp file and rasterise that.
     tmp_fd, tmp_svg = tempfile.mkstemp(suffix='.svg')
     os.close(tmp_fd)
