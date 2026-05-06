@@ -112,8 +112,17 @@ def add_pin_graphics(svg_root, pin):
             'stroke': '#dcdcdc',
             'stroke-width': str(stroke_width)
         })
-        # Add pin function (box)
-        original_d = f"M {initial_point_x},{initial_point_y} l {-box_l*(1-slope)+box_l/2},{0} l {-box_l*slope},{box_h} l {box_l*(1-slope)},{0} l {box_l*slope},{-box_h} Z"
+        # Add pin function (box) — every x-delta is scaled by v so the
+        # parallelogram is mirrored horizontally for left-side pins. Without
+        # this, the connecting line meets the box at its bottom-right corner
+        # instead of the top corner closest to the pin.
+        original_d = (
+            f"M {initial_point_x},{initial_point_y} "
+            f"l {v*(-box_l*(1-slope)+box_l/2)},0 "
+            f"l {v*(-box_l*slope)},{box_h} "
+            f"l {v*(box_l*(1-slope))},0 "
+            f"l {v*(box_l*slope)},{-box_h} Z"
+        )
         rounded_d = svg.round_path_corners(original_d, 0.3)
         box_element = ET.Element(SVG_TAG('path'), {
             'd': rounded_d,
